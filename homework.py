@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 
 from dotenv import load_dotenv
@@ -48,22 +49,31 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
-        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         logging.info('Начат запрос к API')
+        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except ConnectionError as error:
         logging.error(f'Ошибка {error}')
+
     if response.status_code != HTTPStatus.OK:
         raise Exception('Status_code != 200')
+
     return response.json()
 
 
 def check_response(response):
     """Проверяет ответ API на корректность."""
-    homeworks = response['homeworks']
+
     if not isinstance(response, dict):
         raise TypeError('Тип данных не соответствует ожидаемому')
+
+    if 'homeworks' and 'current_date' not in response:
+        raise Exception('Отсутствуют необходимые ключи')
+
+    homeworks = response['homeworks']
+
     if not isinstance(homeworks, list):
         raise Exception('Тип данных не соответствует ожидаемому')
+
     return homeworks
 
 
@@ -92,25 +102,28 @@ def check_tokens():
 
 def main():
     """Основная логика работы бота."""
-    previous_timestamp = int(time.time()) - RETRY_TIME
     current_timestamp = int(time.time())
-    check_tokens()
+    new_message = None
+
+    if not check_tokens():
+        logging.critical('Ошибка, токены недоступны')
+        sys.exit('Ошибка, завершение работы')
+
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     while True:
         try:
-            response = get_api_answer(previous_timestamp)
+            response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
-                send_message(bot, message)
+                updated_message = parse_status(homeworks[0])
+                if str(updated_message) != str(new_message):
+                    new_message = updated_message
+                    send_message(bot, message)
             else:
                 logging.debug(
                     'Новых статусов работы нет'
                 )
-                new_message = parse_status(homeworks[0])
-                if new_message == message:
-                    raise Exception('Сообщения одинаковые')
-            previous_timestamp = current_timestamp
         except Exception as error:
             logging.error(f'Сбой в работе программы: {error}')
         finally:
