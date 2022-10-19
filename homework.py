@@ -65,7 +65,7 @@ def check_response(response):
     if not isinstance(response, dict):
         raise TypeError('Тип данных не соответствует ожидаемому')
 
-    if 'homeworks' and 'current_date' not in response:
+    if 'homeworks' not in response or 'current_date' not in response:
         raise Exception('Отсутствуют необходимые ключи')
 
     homeworks = response['homeworks']
@@ -115,10 +115,9 @@ def main():
             homeworks = check_response(response)
             if homeworks:
                 message = parse_status(homeworks[0])
-                updated_message = parse_status(homeworks[0])
-                if str(updated_message) != str(new_message):
-                    new_message = updated_message
+                if str(message) != str(new_message):
                     send_message(bot, message)
+                    new_message = message
             else:
                 logging.debug(
                     'Новых статусов работы нет'
